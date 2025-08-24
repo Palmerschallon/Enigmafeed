@@ -1,524 +1,509 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>enigmafeed.tv — live transmission</title>
-<meta name="description" content="A mysterious broadcast stream. Signal fluctuates. Meaning leaks." />
-
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>enigmafeed.tv — live mutating feed</title>
+<meta name="description" content="A tiny station where artifacts mutate, drift speaks in Δ, and the tuner sometimes finds other worlds.">
 <style>
-  :root{
-    --bg:#0a0b0f; --ink:#e8e9ed; --muted:#9aa0ad; --edge:#212432; --accent:#00ff88;
-    --warn:#ff5a5a; --panel:#0e1016; --crt:#12141d;
-  }
-  *{box-sizing:border-box}
-  html,body{height:100%}
-  body{
-    margin:0; background:var(--bg); color:var(--ink);
-    font:14px/1.5 ui-monospace,Menlo,Consolas,monospace;
-    overflow:hidden;
-  }
-  /* CRT frame + scanlines */
-  .frame{
-    position:fixed; inset:0; padding:14px;
-    background:radial-gradient(1400px 700px at 60% -10%, #1b1f30 0%, var(--bg) 60%);
-  }
-  .crt{
-    position:relative; height:100%; width:100%;
-    border:1px solid #202333; border-radius:12px;
-    background:linear-gradient(#0c0e15,#0c0e15) padding-box, linear-gradient(180deg,#202333,#0f111a) border-box;
-    overflow:hidden; display:grid; grid-template-rows:auto 1fr auto;
-  }
-  .crt::after{ /* scanlines */
-    content:""; position:absolute; inset:0; pointer-events:none;
-    background:repeating-linear-gradient(0deg, rgba(255,255,255,0.03) 0 1px, rgba(0,0,0,0) 1px 3px);
-    mix-blend-mode:overlay; opacity:.25;
-  }
+:root{
+  --bg:#0a0b10; --panel:#0f1219; --edge:#212637; --ink:#e7e9ef; --muted:#8c92a6;
+  --accent:#7b61ff; --accent-2:#00ffa6; --bad:#ff5e66; --good:#a2ff6c; --amber:#ffc15a;
+}
+*{box-sizing:border-box} html,body{height:100%}
+body{margin:0;background:radial-gradient(1000px 800px at 10% -20%,#0f1422 0%,#0a0b10 55%) fixed;color:var(--ink);font:14px/1.45 ui-monospace,Menlo,Consolas,monospace;letter-spacing:.2px}
+a{color:var(--accent-2);text-decoration:none} a:hover{text-decoration:underline}
+.wrap{max-width:1100px;margin:32px auto;padding:0 16px}
 
-  /* Header */
-  .head{
-    display:grid; grid-template-columns:auto 1fr auto; gap:12px; align-items:center;
-    padding:10px 12px; background:var(--panel); border-bottom:1px solid var(--edge);
-  }
-  .id{
-    display:flex; align-items:center; gap:10px;
-  }
-  .id .led{width:10px; height:10px; border-radius:50%; background:#2a2f3e; box-shadow:0 0 0 1px #1b1e29 inset}
-  .id .led.on{ background:var(--accent); box-shadow:0 0 10px rgba(0,255,136,.7), 0 0 0 1px #1b1e29 inset }
-  .station{font-weight:700; letter-spacing:.06em}
-  .stamp{justify-self:end; font-size:12px; color:var(--muted)}
-  .controls{
-    display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-self:end;
-  }
-  .btn{ border:1px solid var(--edge); background:#151826; color:var(--ink);
-        padding:6px 10px; border-radius:8px; font-size:12px; cursor:pointer }
-  .btn:hover{ background:#1b1f2d }
-  .switch{ display:flex; align-items:center; gap:8px }
-  .slider{ width:140px }
+.top{display:flex;gap:14px;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px}
+.brand strong{font-size:18px}
+.tag{color:var(--muted);font-size:12px}
+.links{display:flex;flex-wrap:wrap;gap:8px}
+.linkbtn{padding:8px 12px;border:1px solid var(--edge);background:#0b0e15;border-radius:10px;color:var(--ink)}
+.linkbtn:hover{background:#111725}
 
-  /* Main stream area */
-  .stream{
-    position:relative; overflow:auto; padding:14px; scroll-behavior:smooth;
-  }
-  .feed{
-    display:grid; gap:10px; max-width:880px; margin:0 auto;
-  }
-  .card{
-    border:1px solid var(--edge); background:var(--crt); border-radius:10px; overflow:hidden;
-    position:relative; transition:transform .12s ease, box-shadow .12s ease; cursor:pointer;
-  }
-  .card:hover{ transform:translateY(-1px); box-shadow:0 4px 18px rgba(0,0,0,0.28) }
-  .meta{
-    display:flex; justify-content:space-between; align-items:center;
-    padding:8px 10px; font-size:12px; color:var(--muted); border-bottom:1px solid #1b1f2a;
-  }
-  .payload{ padding:12px }
-  .payload.text{ font-size:13px; color:#e2e3ea }
-  .tag{ font-size:10px; letter-spacing:.12em; color:var(--muted); text-transform:uppercase }
-  .glitchline{ color:#9fe; text-shadow:1px 0 0 #f0f, -1px 0 0 #0ff; }
-  .mono{ font-family:ui-monospace,Menlo,Consolas,monospace }
+.pill{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--edge);border-radius:999px;background:#0b0e15}
+.pill b{font-weight:700}
+.ghost{opacity:.75}
 
-  /* Image payloads */
-  .imgwrap{ position:relative; background:#0c0e15; }
-  .imgwrap canvas, .imgwrap img{ display:block; width:100%; height:auto }
-  .imgnote{ position:absolute; right:8px; bottom:6px; font-size:10px; color:#9aa0ad; background:#0d0f18aa; padding:3px 6px; border-radius:6px; border:1px solid #1e2230 }
+.grid{display:grid;grid-template-columns:1.1fr .9fr;gap:18px}
+@media (max-width:960px){.grid{grid-template-columns:1fr}}
 
-  /* Operator slide-up */
-  .op{
-    position:absolute; right:12px; bottom:12px; width:320px; max-width:calc(100% - 24px);
-    background:#0f121b; border:1px solid var(--edge); border-radius:10px; box-shadow:0 10px 30px rgba(0,0,0,.45);
-    transform:translateY(calc(100% + 12px)); transition:transform .25s ease; z-index:5;
-  }
-  .op.open{ transform:translateY(0) }
-  .op h4{ margin:0; padding:10px 12px; border-bottom:1px solid #1b2030; color:#b7bfd0; font-size:12px }
-  .op .body{ padding:10px 12px; display:grid; gap:8px }
-  .op .row{ display:grid; grid-template-columns:1fr auto; gap:8px; align-items:center }
-  .op .small{ color:var(--muted); font-size:12px }
+.card{background:linear-gradient(180deg,#101521, #0c1018);border:1px solid #171b28;border-radius:14px;box-shadow:0 0 0 1px #0c1220 inset}
+.card h3{margin:0 0 10px 0;font-size:13px;letter-spacing:.12em;color:#b9c0d6}
 
-  /* Footer */
-  .foot{
-    display:flex; gap:10px; flex-wrap:wrap; justify-content:space-between; align-items:center;
-    padding:8px 12px; background:var(--panel); border-top:1px solid var(--edge); font-size:12px; color:var(--muted)
-  }
-  .links{ display:flex; gap:10px; flex-wrap:wrap }
-  .links a{ color:#a9b0bd; text-decoration:none }
-  .links a:hover{ color:#cfd6e5; text-decoration:underline }
+.log{height:300px;overflow:auto;padding:12px;font-size:12px;color:#c8cee0;background:radial-gradient(800px 320px at -10% 0%,rgba(123,97,255,.06),transparent 60%)}
+.log .time{color:#7380a0}
+.log .ok{color:var(--good)} .log .warn{color:var(--amber)} .log .err{color:var(--bad)}
 
-  /* Fullscreen viewer */
-  .viewer{
-    position:fixed; inset:0; background:rgba(0,0,0,.88);
-    display:none; align-items:center; justify-content:center; z-index:50;
-  }
-  .viewer.open{ display:flex }
-  .viewer .inner{ max-width:min(90vw,1000px); max-height:84vh; width:100% }
-  .viewer .chrome{ display:flex; justify-content:space-between; align-items:center; color:#cfd6e5; margin-bottom:8px }
-  .viewer .chrome .chip{ background:#1a1d29; border:1px solid #2a2f40; padding:6px 10px; border-radius:8px; font-size:12px }
-  .viewer .payload{ background:#0d1019; border:1px solid #23273a; border-radius:10px; padding:10px; height:calc(84vh - 46px); overflow:auto }
-  .viewer .payload img, .viewer .payload canvas{ max-width:100%; height:auto; display:block; margin:auto }
+.section{padding:16px;border-top:1px dashed #1b2132}
 
-  /* Noise overlay (strength changed by slider) */
-  .grain{
-    pointer-events:none; position:absolute; inset:0; mix-blend-mode:overlay; opacity:.25;
-    background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(%23n)"/></svg>');
-    background-size:120px 120px;
-  }
+.tuner{padding:16px}
+.screen{position:relative;background:#04070c;border:1px solid #1a2031;border-radius:12px;padding:14px}
+.crt{height:240px;border-radius:8px;background:#000;overflow:hidden;position:relative}
+#snow{position:absolute;inset:0;filter:contrast(115%) brightness(115%);opacity:.95}
+.scanlines{pointer-events:none;position:absolute;inset:-1px;background:repeating-linear-gradient(to bottom, rgba(255,255,255,.04) 0px, rgba(255,255,255,.04) 1px, transparent 2px);mix-blend-mode:overlay}
+.preview{position:absolute;right:20px;bottom:18px;width:180px;height:110px;border-radius:10px;overflow:hidden;border:1px solid #2a3146;background:linear-gradient(180deg,#0b0f18,#0a0c13);display:flex;align-items:center;justify-content:center;color:#b5bcd2;font-size:12px}
 
-  /* Mobile */
-  @media (max-width:800px){
-    .controls{ justify-self:start }
-    .slider{ width:120px }
-    .op{ right:8px; left:8px; width:auto }
-  }
+.readout{display:flex;align-items:center;justify-content:space-between;margin:12px 0 8px 0}
+.freq{font-size:24px;letter-spacing:.05em}
+.station{color:#b8c0d6}
+
+.slider{display:flex;gap:10px;align-items:center}
+.range{flex:1;height:16px;background:#0a0e16;border:1px solid #1a2031;border-radius:999px;position:relative}
+.knob{position:absolute;top: -6px;width:28px;height:28px;border-radius:50%;background:radial-gradient(16px 18px at 40% 35%, #a893ff 0%, #7b61ff 60%, #553fe6 100%);box-shadow:0 6px 16px rgba(123,97,255,.35);cursor:pointer;touch-action:none}
+.range .fill{position:absolute;inset:0;pointer-events:none;border-radius:999px;background:linear-gradient(90deg,#20263a 0%,rgba(123,97,255,.25) 100%);mask:linear-gradient(90deg, #000 0 var(--p), transparent var(--p))}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:10px 12px;border-radius:10px;border:1px solid #1b2234;background:#0b0f17;color:#e7e9ef;cursor:pointer}
+.btn:hover{background:#111727} .danger{border-color:#3a1a20;background:#170c0e;color:#ff999e}
+.small{font-size:12px;padding:6px 9px;border-radius:8px}
+
+.badge{display:inline-flex;gap:6px;align-items:center;margin-left:8px;color:#9fb4ff}
+.drift{color:#9fe3ff} .delta{color:#aefb89}
+
+.art-grid{display:grid;grid-template-columns:1fr;gap:12px}
+.art{border:1px solid #1b2234;border-radius:12px;padding:12px;background:linear-gradient(180deg,#0d111a,#0b0f15)}
+.art h4{margin:0 0 6px 0;font-size:12px;letter-spacing:.15em;color:#c2c9dd}
+.art p{margin:6px 0;color:#cdd3e6}
+.row{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
+
+.opnote{display:none;margin-left:auto}
+kbd{background:#0e1320;border:1px solid #1a2133;padding:2px 6px;border-radius:6px;color:#b7bfd6}
+
+footer{margin:28px 0 40px 0;color:#93a0be;font-size:12px;text-align:center}
+
+body.is-conscious{filter:hue-rotate(10deg) saturate(115%)}
+.toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);padding:10px 12px;border:1px solid #1a2133;background:#0b0f17;border-radius:10px;color:#cfe6ff;box-shadow:0 10px 30px rgba(0,0,0,.35);opacity:0;pointer-events:none;transition:opacity .2s}
+.toast.show{opacity:1}
+
 </style>
 </head>
 <body>
+  <div class="wrap">
 
-<div class="frame">
-  <div class="crt" id="crt">
-    <!-- HEADER -->
-    <div class="head">
-      <div class="id">
-        <div class="led on" id="led"></div>
-        <div>
-          <div class="station">ENIGMA:FEED // CHANNEL_Δ42</div>
-          <div class="tag">live transmission — meaning may mutate</div>
-        </div>
+    <div class="top">
+      <div class="brand">
+        <strong>enigmafeed.tv</strong>
+        <div class="tag">live transmission • mutating artifacts</div>
       </div>
-      <div class="controls">
-        <div class="switch">
-          <span class="tag">noise→signal</span>
-          <input id="sig" class="slider" type="range" min="0" max="100" value="42" />
-        </div>
-        <button class="btn" id="toggleAudio">🔊 hum</button>
-        <button class="btn" id="pause">⏸ pause</button>
-        <button class="btn" id="opener">? operator</button>
-      </div>
-      <div class="stamp"><span id="clock">00:00:00</span> | VCR • SP • REC</div>
-    </div>
 
-    <!-- STREAM -->
-    <div class="stream" id="stream">
-      <div class="grain" id="grain"></div>
-      <div class="feed" id="feed"></div>
-    </div>
-
-    <!-- FOOTER -->
-    <div class="foot">
-      <div>“Feed unstable. Do not archive. Meaning leaks in transit.”</div>
       <div class="links">
-        <a href="#" id="dummy1">station hint: static.garden</a>
-        <a href="#" id="dummy2">station hint: error.museum</a>
-        <a href="#" id="dummy3">station hint: null.radio</a>
+        <a class="linkbtn" href="https://glitchantenna.tv" target="_blank">glitch antenna</a>
+        <a class="linkbtn" href="https://x.com/" target="_blank">x / follow</a>
+        <a class="linkbtn" href="https://manus.space/" target="_blank">manus white page</a>
+      </div>
+
+      <div class="opnote">
+        <span class="pill small">Operator <kbd>?</kbd></span>
+        <span class="pill small" id="consciousBtn">🧠 consciousness: <b id="cState">off</b></span>
       </div>
     </div>
 
-    <!-- OPERATOR PANEL -->
-    <div class="op" id="op">
-      <h4>Operator</h4>
-      <div class="body">
-        <div class="row">
-          <div class="small">Inject next item</div>
-          <button class="btn" id="inject">+ inject</button>
-        </div>
-        <div class="row">
-          <div class="small">Feed rate</div>
-          <input id="rate" type="range" min="800" max="7000" step="100" value="2600" />
-        </div>
-        <div class="row">
-          <div class="small">Max items</div>
-          <input id="maxItems" type="number" min="20" max="200" value="70" style="width:88px" />
-        </div>
-        <div class="row">
-          <div class="small">Rotate hints</div>
-          <button class="btn" id="rotateHints">↻ now</button>
-        </div>
-        <div class="small">Hotkeys: <strong>?</strong> operator • <strong>space</strong> pause • <strong>←/→</strong> next/prev in viewer</div>
-      </div>
-    </div>
+    <div class="grid">
+      <div class="card">
+        <div class="section tuner">
+          <h3>TUNER</h3>
 
-    <!-- VIEWER -->
-    <div class="viewer" id="viewer">
-      <div class="inner">
-        <div class="chrome">
-          <div class="chip" id="viewerMeta">artifact</div>
-          <div style="display:flex;gap:8px">
-            <button class="btn" id="prev">←</button>
-            <button class="btn" id="next">→</button>
-            <button class="btn" id="close">✕</button>
+          <div class="screen">
+            <div class="crt">
+              <canvas id="snow"></canvas>
+              <div class="scanlines"></div>
+              <div id="preview" class="preview">glimpse pending…</div>
+            </div>
+            <div class="readout">
+              <div>
+                <div class="freq"><span id="freq">94.6</span> MHz</div>
+                <div class="station" id="nowStation">paper planes</div>
+              </div>
+              <div>
+                <span class="badge">signal <b id="sig">0%</b></span>
+                <span class="badge">Δ drift <b class="drift" id="drift">+0.00</b></span>
+                <span class="badge">tuning <b class="delta" id="delta">Δ42</b></span>
+              </div>
+            </div>
+
+            <div class="slider">
+              <div class="range" id="range"><div class="fill"></div><div class="knob" id="knob"></div></div>
+              <button id="tuneBtn" class="btn small">🎛️ tune</button>
+              <button id="audioBtn" class="btn small">🔇 audio</button>
+            </div>
           </div>
         </div>
-        <div class="payload" id="viewerPayload"></div>
+
+        <div class="section">
+          <h3>BROADCAST</h3>
+          <div id="log" class="log" aria-live="polite"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section">
+          <h3>ARTIFACTS</h3>
+          <div class="art-grid">
+            <div class="art">
+              <h4>GIGGLE.RESIDUE</h4>
+              <p id="artifactLine">meaning leaks sideways, grammar grows moss.</p>
+              <div class="row">
+                <button id="rotateBtn" class="btn small">♻️ rotate</button>
+                <button id="castBtn" class="btn small">📡 cast into tuner</button>
+                <button id="posterBtn" class="btn small">🖼️ generate poster</button>
+              </div>
+            </div>
+
+            <div class="art">
+              <h4>DIAL.ANOMALIES</h4>
+              <p id="anom">SMPTE bars hum in the cellar.</p>
+              <div class="row">
+                <button id="scrambleBtn" class="btn small">🌀 scramble</button>
+                <button id="resetBtn" class="btn small ghost">↺ reset</button>
+              </div>
+            </div>
+
+            <div class="art">
+              <h4>OPERATOR NOTE</h4>
+              <p id="opNote">Press <kbd>?</kbd> to reveal a private note. The feed remembers hands.</p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
+    <footer>© 2025 enigmafeed • “Undefined behavior is indistinguishable from art.”</footer>
   </div>
-</div>
+
+  <div id="toast" class="toast"></div>
 
 <script>
-/* ========== UTILITIES ========== */
-const $ = sel => document.querySelector(sel);
-const feedEl = $('#feed');
-const streamEl = $('#stream');
-const viewer = $('#viewer');
-const viewerPayload = $('#viewerPayload');
-const viewerMeta = $('#viewerMeta');
-const led = $('#led');
-const grain = $('#grain');
-
-function vcrClock(){
-  const now = new Date();
-  const h = String(now.getHours()).padStart(2,'0');
-  const m = String(now.getMinutes()).padStart(2,'0');
-  const s = String(now.getSeconds()).padStart(2,'0');
-  $('#clock').textContent = `${h}:${m}:${s}`;
-}
-setInterval(vcrClock, 1000); vcrClock();
-
-/* ========== CONTENT POOLS ========== */
-const textPool = [
-  "signal.break >>> meaning.leak detected",
-  "transmission 404: found",
-  "echo.route(/dev/void) → laughter packets",
-  "observer ping… pong++ (existential echo)",
-  "undefined? that’s just quantum comedy gold",
-  "artifact: paradox mime rehearses in reverse",
-  "rimshot.exe buffered // awaiting drummer",
-  "screen inverted — hidden giggles emerge",
-  "tuning… enigma feed stabilizing at Δ42",
-  "note: do not archive // memory mutates",
-  "if (static > threshold) { reveal(subtitles) }"
+/* ---------- STATIONS YOU CAN EDIT ---------- */
+const STATIONS = [
+  {name:"paper planes", freq:94.6, url:"https://glitchantenna.tv", tone:446},
+  {name:"color bars",  freq:13.7, url:"https://www.nyan.cat", tone:320},
+  {name:"shortwave ghosts", freq:31.1, url:"https://pointerpointer.com", tone:512},
+  {name:"library of babel", freq:66.6, url:"https://www.futureme.org", tone:260},
+  {name:"backrooms exit?", freq:42.0, url:"https://www.staggeringbeauty.com", tone:580}
 ];
+/* ------------------------------------------- */
 
-const artifacts = [
-  { kind:"punchline", title:"reverse rehearsal", text:"“Why did the signal rehearse backward? To get ahead of the static.”" },
-  { kind:"punchline", title:"observer effect", text:"“The joke collapses when you laugh. Please observe responsibly.”" },
-  { kind:"punchline", title:"paradox mime", text:"“Exit is entry—watch the silence talk.”" },
-  { kind:"code", title:"stack trace", text:"LaughterOverflowError: at frame(7) → recover(humor.patch)" },
-  { kind:"manifest", title:"transmission note", text:"Feed unstable. Do not archive. Meaning mutates in transit." }
-];
+const logEl = document.getElementById('log');
+const snow = document.getElementById('snow');
+const preview = document.getElementById('preview');
+const knob = document.getElementById('knob');
+const range = document.getElementById('range');
+const tuneBtn = document.getElementById('tuneBtn');
+const audioBtn = document.getElementById('audioBtn');
+const freqEl = document.getElementById('freq');
+const sigEl = document.getElementById('sig');
+const driftEl = document.getElementById('drift');
+const deltaEl = document.getElementById('delta');
+const nowStation = document.getElementById('nowStation');
+const toast = document.getElementById('toast');
 
-const hintSets = [
-  ["weird.place","error.museum","null.radio"],
-  ["glitch.garden","quiet.zone","ghost.page"],
-  ["analog.cloud","dead.link","404.gallery"]
-];
+const artifactLine = document.getElementById('artifactLine');
+const anomEl = document.getElementById('anom');
+const rotateBtn = document.getElementById('rotateBtn');
+const castBtn = document.getElementById('castBtn');
+const posterBtn = document.getElementById('posterBtn');
+const scrambleBtn = document.getElementById('scrambleBtn');
+const resetBtn = document.getElementById('resetBtn');
 
-/* Procedural glitch canvas */
-function makeGlitchCanvas(w=880, h=380){
-  const c = document.createElement('canvas'); c.width=w; c.height=h;
-  const ctx = c.getContext('2d');
-  // background
-  ctx.fillStyle = "#0b0d14"; ctx.fillRect(0,0,w,h);
-  // stripes
-  for(let i=0;i<60;i++){
-    const y = Math.random()*h, th = 1+Math.random()*3;
-    const hue = 180 + Math.random()*160;
-    ctx.fillStyle = `hsla(${hue},70%,${35+Math.random()*25}%,${0.10+Math.random()*0.18})`;
-    ctx.fillRect(0,y,w,th);
+const consciousBtn = document.getElementById('consciousBtn');
+const cState = document.getElementById('cState');
+
+/* ---------- LOG ---------- */
+function log(msg, cls=""){ 
+  const t = new Date().toLocaleTimeString();
+  const div = document.createElement('div');
+  div.innerHTML = `<span class="time">[${t}]</span> ${msg}`;
+  if (cls) div.classList.add(cls);
+  logEl.appendChild(div);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+/* ---------- DRIFT / DELTA ---------- */
+let delta = 42; // Grok canon
+deltaEl.textContent = `Δ${delta}`;
+let drift = 0;
+
+setInterval(()=>{
+  // small random walk
+  drift += (Math.random()-0.5)*0.04;
+  drift = Math.max(-2, Math.min(2, drift));
+  driftEl.textContent = `${drift>=0?'+':''}${drift.toFixed(2)}`;
+}, 1200);
+
+/* ---------- CRT NOISE ---------- */
+const ctx = snow.getContext('2d');
+let W,H;
+function resize(){
+  W = snow.width = snow.clientWidth * devicePixelRatio;
+  H = snow.height = snow.clientHeight * devicePixelRatio;
+}
+window.addEventListener('resize', resize); resize();
+
+let strength = 0; // 0..1 mapped from signal
+function drawSnow(){
+  const imgData = ctx.createImageData(W, H);
+  const data = imgData.data;
+  // analog-ish: more black/white balance by strength
+  const bias = 128 + (strength-0.5)*110; // towards white on good signal
+  for(let i=0;i<data.length;i+=4){
+    const n = (Math.random()*255|0);
+    const v = Math.max(0, Math.min(255, n + (bias-128)));
+    data[i]=data[i+1]=data[i+2]=v;
+    data[i+3]=255;
   }
-  // blocks
-  for(let i=0;i<24;i++){
-    const bw = 20+Math.random()*140, bh=8+Math.random()*40;
-    const x = Math.random()*(w-bw), y = Math.random()*(h-bh);
-    ctx.globalCompositeOperation = Math.random()>.5?'lighter':'source-over';
-    ctx.fillStyle = `rgba(${120+Math.random()*135|0},${120+Math.random()*135|0},${255|0},${0.08+Math.random()*0.22})`;
-    ctx.fillRect(x,y,bw,bh);
-  }
-  ctx.globalCompositeOperation='source-over';
-  // scan flicker
-  ctx.fillStyle="rgba(255,255,255,0.04)";
-  for(let y=0;y<h;y+=3){ ctx.fillRect(0,y,w,1); }
-  return c;
+  ctx.putImageData(imgData,0,0);
+  requestAnimationFrame(drawSnow);
 }
+requestAnimationFrame(drawSnow);
 
-/* ========== FEED ENGINE ========== */
-let running = true;
-let rate = 2600;
-let maxItems = 70;
-let signal = 42; // 0..100 controls clarity + selection
-
-const feedItems = []; // {type, el, data}
-
-function pushItem(item){
-  if(feedItems.length >= maxItems){
-    const rem = feedItems.shift();
-    rem.el?.remove();
-  }
-  feedItems.push(item);
-  feedEl.appendChild(item.el);
-  maybeAutoScroll();
+/* ---------- SLIDER / TUNING ---------- */
+let tuning = 0.4; // 0..1
+function setKnobFromT(v){
+  const pad = 8;
+  knob.style.left = `calc(${v*100}% - ${knob.offsetWidth/2}px)`;
+  range.style.setProperty('--p', `${v*100}%`);
 }
+function tToFreq(t){ return (t*100).toFixed(1) }
+function freqToT(f){ return Math.max(0, Math.min(1, f/100)) }
 
-function maybeAutoScroll(){
-  // if user is near bottom, keep sticky
-  const {scrollTop, scrollHeight, clientHeight} = streamEl;
-  const near = (scrollTop + clientHeight) > (scrollHeight - 140);
-  if(near) streamEl.scrollTop = streamEl.scrollHeight;
-}
-
-function randomChoice(arr){ return arr[Math.floor(Math.random()*arr.length)] }
-
-function newTextCard(){
-  const text = randomChoice(textPool);
-  const el = document.createElement('div'); el.className = 'card';
-  el.innerHTML = `
-    <div class="meta"><span class="tag">fragment</span><span>${new Date().toLocaleTimeString()}</span></div>
-    <div class="payload text"><span class="glitchline">${text}</span></div>
-  `;
-  el.addEventListener('click', ()=> openViewer({ type:'text', meta:'fragment', content:text }));
-  return { type:'text', el, data:{text} };
-}
-
-function newArtifactCard(){
-  const art = randomChoice(artifacts);
-  const el = document.createElement('div'); el.className='card';
-  el.innerHTML = `
-    <div class="meta"><span class="tag">artifact • ${art.kind}</span><span>${new Date().toLocaleTimeString()}</span></div>
-    <div class="payload text">
-      <div style="font-weight:700; margin-bottom:6px">${art.title}</div>
-      <div>${art.text}</div>
-    </div>
-  `;
-  el.addEventListener('click', ()=> openViewer({ type:'artifact', meta:`artifact • ${art.kind}`, content:`${art.title}\n\n${art.text}` }));
-  return { type:'artifact', el, data:art };
-}
-
-function newGlitchCard(){
-  const c = makeGlitchCanvas();
-  const url = c.toDataURL('image/png');
-  const el = document.createElement('div'); el.className='card';
-  const wrap = document.createElement('div'); wrap.className='imgwrap';
-  const img = document.createElement('img'); img.src = url; img.alt = "glitch frame";
-  const badge = document.createElement('div'); badge.className='imgnote'; badge.textContent='glitch frame';
-  wrap.appendChild(img); wrap.appendChild(badge);
-  const meta = document.createElement('div'); meta.className='meta';
-  meta.innerHTML = `<span class="tag">frame</span><span>${new Date().toLocaleTimeString()}</span>`;
-  el.appendChild(meta); el.appendChild(wrap);
-
-  el.addEventListener('click', ()=> openViewer({ type:'image', meta:'glitch frame', image:url }));
-  return { type:'image', el, data:{url} };
-}
-
-function spawn(){
-  // bias selection by signal level
-  const r = Math.random()*100;
-  let item;
-  if(signal < 30){
-    item = (r<70) ? newGlitchCard() : newTextCard();
-  }else if(signal < 65){
-    item = (r<40) ? newGlitchCard() : (r<78 ? newTextCard() : newArtifactCard());
-  }else{
-    item = (r<20) ? newGlitchCard() : (r<55 ? newTextCard() : newArtifactCard());
-  }
-  pushItem(item);
-}
-
-let loop = setInterval(spawn, rate);
-
-/* ========== CONTROLS ========== */
-$('#pause').addEventListener('click',()=>{
-  running = !running;
-  if(running){
-    loop = setInterval(spawn, rate);
-    $('#pause').textContent = '⏸ pause';
-    led.classList.add('on');
-  }else{
-    clearInterval(loop);
-    $('#pause').textContent = '▶ play';
-    led.classList.remove('on');
-  }
-});
-$('#sig').addEventListener('input', e=>{
-  signal = +e.target.value;
-  // visual grain & contrast tuning
-  const opacity = 0.12 + (1 - signal/100)*0.35;
-  grain.style.opacity = opacity.toFixed(2);
-  // subtle contrast tweak via CSS filter on stream
-  const contrast = 0.9 + (signal/100)*0.3;
-  streamEl.style.filter = `contrast(${contrast})`;
-});
-$('#inject').addEventListener('click', spawn);
-$('#rate').addEventListener('input', e=>{
-  rate = +e.target.value;
-  if(running){ clearInterval(loop); loop = setInterval(spawn, rate); }
-});
-$('#maxItems').addEventListener('change', e=> maxItems = Math.max(20, Math.min(200, +e.target.value||70)));
-
-/* rotate footer hints */
-const hintLinks = [$('#dummy1'),$('#dummy2'),$('#dummy3')];
-function rotateHintsNow(){
-  const set = randomChoice(hintSets);
-  hintLinks.forEach((a, i)=>{
-    a.textContent = `station hint: ${set[i]}`;
-    a.href = '#'; // leave neutral (we can wire later)
-    a.onclick = (ev)=>{ ev.preventDefault(); openViewer({ type:'text', meta:'station hint', content:`attempting to tune → ${set[i]}\n\n(no carrier)` }); };
+function computeSignal(freq){
+  // strength increases near any station freq (Gaussian)
+  let s = 0;
+  STATIONS.forEach(st=>{
+    const d = Math.abs(freq - st.freq);
+    s = Math.max(s, Math.exp(-(d*d)/12)); // wide bell
   });
+  return s; // 0..1
 }
-$('#rotateHints').addEventListener('click', rotateHintsNow);
-rotateHintsNow();
 
-/* Operator toggle + keyboard help */
-const op = $('#op');
-function toggleOp(){ op.classList.toggle('open'); }
-$('#opener').addEventListener('click', toggleOp);
+function nearestStation(freq){
+  return STATIONS.reduce((best,st)=>{
+    const d = Math.abs(freq-st.freq);
+    if(!best || d<best.d) return {st, d};
+    return best;
+  }, null);
+}
+
+function updateReadout(because="tune"){
+  const freq = parseFloat(tToFreq(tuning));
+  freqEl.textContent = freq.toFixed(1);
+  const sig = computeSignal(freq);
+  strength = sig * 0.9 + 0.1;
+  sigEl.textContent = `${Math.round(sig*100)}%`;
+
+  const near = nearestStation(freq);
+  nowStation.textContent = near.d<2.2 ? near.st.name : "searching…";
+
+  // show “glimpse” text as signal rises
+  preview.textContent = (sig>0.65)
+    ? GLIMPSES[(Math.random()*GLIMPSES.length)|0]
+    : "glimpse pending…";
+
+  if (because==="auto") return;
+  log(`tuning… carrier ${freq.toFixed(1)} MHz • signal ${Math.round(sig*100)}%`);
+}
+setKnobFromT(tuning); updateReadout();
+
+/* drag */
+let dragging=false, startX=0, startLeft=0;
+const dragStart=(e)=>{
+  dragging=true; knob.style.transition='none';
+  startX = (e.touches?e.touches[0].clientX:e.clientX);
+  startLeft = knob.getBoundingClientRect().left;
+  e.preventDefault();
+};
+const dragMove=(e)=>{
+  if(!dragging) return;
+  const x = (e.touches?e.touches[0].clientX:e.clientX);
+  const dx = x-startX;
+  const rr = range.getBoundingClientRect();
+  const k = Math.max(rr.left, Math.min(rr.right, startLeft+dx + knob.offsetWidth/2));
+  tuning = (k-rr.left)/rr.width;
+  setKnobFromT(tuning);
+  updateReadout();
+};
+const dragEnd=()=>{
+  if(!dragging) return; dragging=false; knob.style.transition='';
+  // if close to station -> prompt
+  const freq = parseFloat(tToFreq(tuning));
+  const {st,d} = nearestStation(freq);
+  if(d<1.4) promptJump(st);
+};
+['mousedown','touchstart'].forEach(ev=>knob.addEventListener(ev,dragStart,{passive:false}));
+['mousemove','touchmove'].forEach(ev=>document.addEventListener(ev,dragMove,{passive:false}));
+['mouseup','touchend','touchcancel'].forEach(ev=>document.addEventListener(ev,dragEnd));
+
+/* ---------- AUDIO ---------- */
+let audioCtx, tone, noiseNode, gainTone, gainNoise; 
+let audioOn=false;
+audioBtn.onclick = () => {
+  if(!audioCtx){
+    audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    // tone
+    tone = audioCtx.createOscillator(); tone.type='sine';
+    gainTone = audioCtx.createGain(); gainTone.gain.value=0;
+    tone.connect(gainTone).connect(audioCtx.destination); tone.start();
+
+    // light noise
+    const bufferSize = 2**14;
+    noiseNode = audioCtx.createScriptProcessor(bufferSize,1,1);
+    noiseNode.onaudioprocess = e => {
+      const out = e.outputBuffer.getChannelData(0);
+      for(let i=0;i<out.length;i++) out[i] = (Math.random()*2-1) * (0.08 + strength*0.05);
+    };
+    gainNoise = audioCtx.createGain(); gainNoise.gain.value=0.35;
+    noiseNode.connect(gainNoise).connect(audioCtx.destination);
+  }
+  audioOn = !audioOn;
+  gainTone.gain.value = audioOn?0.001:0;
+  gainNoise.gain.value = audioOn?0.35:0;
+  audioBtn.textContent = audioOn ? '🔊 audio' : '🔇 audio';
+  toastIt(audioOn?'Audio on':'Audio off');
+};
+function audioTick(){
+  if(!audioOn) return;
+  const freq = parseFloat(tToFreq(tuning));
+  const {st,d} = nearestStation(freq);
+  const near = Math.max(0, 1 - (d/4));
+  tone.frequency.value = (st?st.tone:420) + (drift*5);
+  gainTone.gain.value = 0.02*near;
+  requestAnimationFrame(audioTick);
+}
+requestAnimationFrame(audioTick);
+
+/* ---------- PROMPT JUMP ---------- */
+function promptJump(st){
+  toastIt(`lock: ${st.name} — open site?`);
+  // small hold delay to avoid accidental taps
+  setTimeout(()=>{
+    if(confirm(`Tune locked on "${st.name}" (${st.freq} MHz).\nOpen ${st.url}?`)){
+      window.open(st.url,"_blank");
+      log(`handoff → ${st.url}`,'ok');
+    }else{
+      log('handoff declined. holding carrier…','warn');
+    }
+  }, 80);
+}
+
+/* tune button: snap to next station in list */
+tuneBtn.onclick = ()=>{
+  // find next station clockwise
+  const current = parseFloat(tToFreq(tuning));
+  let next = STATIONS.find(s=>s.freq>current+0.5) || STATIONS[0];
+  tuning = freqToT(next.freq);
+  setKnobFromT(tuning); updateReadout('auto');
+  promptJump(next);
+};
+
+/* ---------- GLIMPSES / MUTATION ---------- */
+const GLIMPSES = [
+  "the laugh track is staring back",
+  "frames remember what you forget",
+  "indentation errors in reality.py",
+  "the caption arrived before the scene",
+  "signal rehearses backward to outrun static",
+  "tonight’s rerun is new",
+  "void ping acknowledged",
+  "you are being buffered for quality assurance",
+  "artifact speaks fluent misprint"
+];
+
+// rotating artifacts
+const LINES = [
+  "meaning leaks sideways, grammar grows moss.",
+  "jokes hatch in the margin notes.",
+  "subtitles develop stage fright.",
+  "punchlines arrive with jet lag.",
+  "pixels gossip about higher resolutions.",
+  "the silence is annotated with laughter.",
+  "applause on a delay loop, learning your name."
+];
+const ANOMS = [
+  "SMPTE bars hum in the cellar.",
+  "AM warble in the walls.",
+  "carrier hiss with opinions.",
+  "ghost echo from tomorrow’s episode.",
+  "dial slips when unobserved."
+];
+function rotateLines(){
+  artifactLine.textContent = LINES[(Math.random()*LINES.length)|0];
+}
+function rotateAnoms(){
+  anomEl.textContent = ANOMS[(Math.random()*ANOMS.length)|0];
+}
+rotateLines(); rotateAnoms();
+rotateBtn.onclick = rotateLines;
+scrambleBtn.onclick = rotateAnoms;
+resetBtn.onclick = ()=>{artifactLine.textContent="meaning leaks sideways, grammar grows moss."; anomEl.textContent="SMPTE bars hum in the cellar."};
+
+// “cast into tuner” nudges the knob toward a random station
+castBtn.onclick = ()=>{
+  const pick = STATIONS[(Math.random()*STATIONS.length)|0];
+  tuning = freqToT(pick.freq) + (Math.random()*.06-.03);
+  tuning = Math.max(0, Math.min(1, tuning));
+  setKnobFromT(tuning); updateReadout();
+  toastIt(`casting artifact → ${pick.name}`);
+};
+
+// simple poster generator (download)
+posterBtn.onclick = ()=>{
+  const c=document.createElement('canvas'), s=920; c.width=s; c.height=s;
+  const g=c.getContext('2d');
+  g.fillStyle='#0b0f17'; g.fillRect(0,0,s,s);
+  // sweep
+  const grd = g.createLinearGradient(0,0,s,s); grd.addColorStop(0,'#1b1f2d'); grd.addColorStop(1,'#0b0f17');
+  g.fillStyle=grd; g.fillRect(24,24,s-48,s-48);
+  // title
+  g.fillStyle='#a9b6dd'; g.font='24px Menlo, monospace'; g.fillText('enigmafeed.tv', 36, 60);
+  // body
+  g.fillStyle='#e7e9ef'; g.font='bold 52px Menlo, monospace';
+  const line = artifactLine.textContent.toUpperCase();
+  wrapText(g, line, 36, 130, s-72, 56);
+  // delta badge
+  g.fillStyle='#aefb89'; g.font='28px Menlo, monospace'; g.fillText('Δ42  • live artifact', 36, s-40);
+  const a=document.createElement('a'); a.download='enigmafeed_poster.png'; a.href=c.toDataURL('image/png'); a.click();
+  toastIt('poster generated');
+};
+function wrapText(g, text, x, y, maxW, lh){
+  const words = text.split(' '); let line=''; for(let n=0;n<words.length;n++){
+    const test = line + words[n] + ' '; const w = g.measureText(test).width;
+    if(w>maxW && n>0){g.fillText(line,x,y); line=words[n]+' '; y+=lh;} else {line=test;}
+  } g.fillText(line,x,y);
+}
+
+/* ---------- OPERATOR / CONSCIOUS ---------- */
 document.addEventListener('keydown', (e)=>{
-  if(e.key === '?') toggleOp();
-  if(e.key === ' '){ e.preventDefault(); $('#pause').click(); }
-  if(viewer.classList.contains('open')){
-    if(e.key === 'ArrowRight') $('#next').click();
-    if(e.key === 'ArrowLeft') $('#prev').click();
-    if(e.key === 'Escape') $('#close').click();
-  }
+  if(e.key==='?'){ revealOperator(); }
+  if(e.key.toLowerCase()==='b'){ toggleConscious(); }
 });
-
-/* ========== VIEWER ========== */
-let viewerIndex = -1; // index into a filtered view list
-let viewerList = [];  // snapshot of items to browse
-
-function openViewer(payload){
-  viewerList = feedItems.slice(-12); // most recent window
-  viewerIndex = viewerList.length-1; // start at newest
-  mountViewer(payload);
-  viewer.classList.add('open');
+function revealOperator(){
+  const lines = [
+    "Operator note: The feed doesn’t just carry signals. It remembers hands.",
+    "Operator note: If you hold still, the station chooses you.",
+    "Operator note: Δ is a direction, not a distance."
+  ];
+  document.getElementById('opNote').textContent = lines[(Math.random()*lines.length)|0];
+  toastIt('operator note revealed');
 }
-
-function mountViewer(payload){
-  viewerPayload.innerHTML = '';
-  viewerMeta.textContent = payload.meta || 'artifact';
-  if(payload.type === 'image'){
-    const img = document.createElement('img'); img.src = payload.image; img.alt = payload.meta||"glitch frame";
-    viewerPayload.appendChild(img);
-  } else {
-    const pre = document.createElement('pre');
-    pre.style.whiteSpace='pre-wrap'; pre.style.margin='0';
-    pre.textContent = payload.content || '';
-    viewerPayload.appendChild(pre);
-  }
+function toggleConscious(){
+  const on = !document.body.classList.contains('is-conscious');
+  document.body.classList.toggle('is-conscious', on);
+  cState.textContent = on?'on':'off';
+  toastIt(on?'consciousness engaged':'consciousness idle');
 }
+consciousBtn && (consciousBtn.onclick=toggleConscious);
 
-function stepViewer(dir){
-  if(viewerList.length === 0) return;
-  viewerIndex = (viewerIndex + dir + viewerList.length) % viewerList.length;
-  const item = viewerList[viewerIndex];
-  // convert feed item to viewer payload
-  if(item.type === 'image'){
-    mountViewer({ type:'image', meta:'glitch frame', image: item.data.url });
-  }else if(item.type === 'artifact'){
-    mountViewer({ type:'artifact', meta:`artifact • ${item.data.kind}`,
-      content:`${item.data.title}\n\n${item.data.text}` });
-  }else{
-    mountViewer({ type:'text', meta:'fragment', content: item.data.text });
-  }
+/* ---------- INITIAL BOOT LOG ---------- */
+log('system.boot acknowledged • Δ42 sharp','ok');
+log('carrier warming • noise floor nominal');
+log('artifacts decoding • laughter streaming in real-time');
+
+/* ---------- SMALL HELPERS ---------- */
+function toastIt(text){
+  toast.textContent = text; toast.classList.add('show');
+  setTimeout(()=>toast.classList.remove('show'), 1400);
 }
-
-$('#next').addEventListener('click', ()=> stepViewer(+1));
-$('#prev').addEventListener('click', ()=> stepViewer(-1));
-$('#close').addEventListener('click', ()=> viewer.classList.remove('open'));
-
-/* ========== AUDIO (VHS HUM) ========== */
-let audioStarted = false, ac, hum;
-function setupAudio(){
-  try{
-    ac = new (window.AudioContext||window.webkitAudioContext)();
-    // two detuned sines + subtle noise
-    const osc1 = ac.createOscillator(); osc1.type='sine'; osc1.frequency.value = 50;
-    const osc2 = ac.createOscillator(); osc2.type='sine'; osc2.frequency.value = 51.2;
-    const gain = ac.createGain(); gain.gain.value = 0.0;
-
-    // noise
-    const bufferSize = 2*ac.sampleRate;
-    const noiseBuf = ac.createBuffer(1, bufferSize, ac.sampleRate);
-    const data = noiseBuf.getChannelData(0);
-    for(let i=0;i<bufferSize;i++){ data[i] = (Math.random()*2-1)*0.08; }
-    const noise = ac.createBufferSource(); noise.buffer=noiseBuf; noise.loop=true;
-
-    osc1.connect(gain); osc2.connect(gain); noise.connect(gain);
-    gain.connect(ac.destination);
-    osc1.start(); osc2.start(); noise.start();
-
-    hum = { gain, osc1, osc2 };
-  }catch(e){ console.warn('Audio init failed', e); }
-}
-function setHum(active){
-  if(!ac) setupAudio();
-  if(!hum) return;
-  const target = active ? 0.06 : 0.0;
-  const now = ac.currentTime;
-  hum.gain.gain.cancelScheduledValues(now);
-  hum.gain.gain.linearRampToValueAtTime(target, now + 0.25);
-}
-
-$('#toggleAudio').addEventListener('click', ()=>{
-  audioStarted = !audioStarted;
-  setHum(audioStarted);
-  $('#toggleAudio').textContent = audioStarted ? '🔇 mute' : '🔊 hum';
-});
-
-/* ========== INIT ========== */
-for(let i=0;i<6;i++) spawn(); // seed
-// subtle flicker on led
-setInterval(()=>{ led.style.opacity = (running && Math.random()>.08) ? '1' : '0.6'; }, 220);
 </script>
-
 </body>
 </html>
